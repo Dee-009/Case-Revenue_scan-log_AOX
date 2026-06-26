@@ -115,7 +115,9 @@ export default function App() {
       // 1. Pull the case header (pan number, account number, primary product, business unit)
       const { data: caseRows, error: caseErr } = await supabase
         .from('Cases')
-        .select('"Case Number","Pan Number","Account Number","Primary Product","Business Unit"')
+        .select(
+          '"Case Number","Pan Number","Account Number","Primary Product","Primary Product Number","Business Unit"'
+        )
         .eq('Case Number', caseNumber)
         .limit(1)
 
@@ -127,18 +129,31 @@ export default function App() {
       }
       const c = caseRows[0]
 
-      // 2. Pull line items for units / price (a case can have more than one line item, so sum them)
+      // 2. Pull line items. A case has several lines (shipping, fees, workflow stages, the
+      // actual arch product) — only the line matching the case's Primary Product Number is
+      // the real arch/unit count. Price is the total revenue across all billed lines.
       const { data: lineItems, error: liErr } = await supabase
         .from('Line Items')
-        .select('"Product","Units","Price Net"')
+        .select('"Product","Product Number","Units","Price Net"')
         .eq('Case Number', caseNumber)
 
       if (liErr) throw liErr
 
-      const units = (lineItems || []).reduce((sum, li) => sum + (Number(li.Units) || 0), 0)
-      const price = (lineItems || []).reduce((sum, li) => sum + (Number(li['Price Net']) || 0), 0)
-      const productType =
-        c['Primary Product'] || (lineItems && lineItems[0] && lineItems[0].Product) || ''
+      const items = lineItems || []
+      const primaryNumber = c['Primary Product Number']
+      let primaryLine = items.find((li) => li['Product Number'] === primaryNumber)
+      if (!primaryLine) {
+        // Fallback: the line with the highest Units is almost always the actual arch product
+        // (fees/shipping/workflow lines are typically 1, the arch product carries the real count)
+        primaryLine = items.reduce(
+          (best, li) => ((Number(li.Units) || 0) > (Number(best?.Units) || 0) ? li : best),
+          null
+        )
+      }
+
+      const units = primaryLine ? Number(primaryLine.Units) || 0 : 0
+      const price = items.reduce((sum, li) => sum + (Number(li['Price Net']) || 0), 0)
+      const productType = primaryLine?.Product || c['Primary Product'] || ''
 
       // 3. Pull the account / practice name
       let account = c['Account Number'] || ''
