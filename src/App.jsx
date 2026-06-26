@@ -23,6 +23,37 @@ export default function App() {
     inputRef.current?.focus()
   }, [])
 
+  // Mobile camera-scanner apps (and the on-screen keyboard closing after a scan) tend to steal
+  // focus away from the page. Whenever that happens, grab it back automatically so the
+  // supervisor never has to tap the field again between scans.
+  useEffect(() => {
+    function refocus() {
+      if (loading) return
+      // Don't steal focus from other inputs/buttons the user is actually using (e.g. typing a
+      // confirm() dialog isn't covered by this, but remove/clear buttons are real clicks)
+      const active = document.activeElement
+      const isOtherInteractive =
+        active && active !== document.body && active !== inputRef.current && active.tagName !== 'INPUT'
+      if (isOtherInteractive) return
+      inputRef.current?.focus()
+    }
+
+    // Coming back to the tab/app after a camera scan
+    document.addEventListener('visibilitychange', refocus)
+    window.addEventListener('focus', refocus)
+    // Tapping anywhere on the page (in case the keyboard closed) brings focus back
+    document.addEventListener('click', refocus)
+
+    const interval = setInterval(refocus, 800)
+
+    return () => {
+      document.removeEventListener('visibilitychange', refocus)
+      window.removeEventListener('focus', refocus)
+      document.removeEventListener('click', refocus)
+      clearInterval(interval)
+    }
+  }, [loading])
+
   // Auto-submit: most scanners fire a burst of keystrokes very fast, then stop.
   // We watch for that pause and submit automatically — no Enter key, no tapping "Add" needed.
   // If the scanner DOES send Enter, handleScan fires immediately via onKeyDown instead.
