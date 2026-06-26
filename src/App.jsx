@@ -16,11 +16,27 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null) // { type: 'error'|'warn'|'ok', text }
   const inputRef = useRef(null)
+  const autoSubmitTimer = useRef(null)
 
-  // Keep the input focused so a barcode scanner (which just types + Enter) always lands here
+  // Keep the input focused so a barcode scanner (which just types, no tapping needed) always lands here
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
+
+  // Auto-submit: most scanners fire a burst of keystrokes very fast, then stop.
+  // We watch for that pause and submit automatically — no Enter key, no tapping "Add" needed.
+  // If the scanner DOES send Enter, handleScan fires immediately via onKeyDown instead.
+  useEffect(() => {
+    if (autoSubmitTimer.current) clearTimeout(autoSubmitTimer.current)
+    if (!caseInput.trim() || loading) return
+
+    autoSubmitTimer.current = setTimeout(() => {
+      handleScan()
+    }, 350)
+
+    return () => clearTimeout(autoSubmitTimer.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseInput, loading])
 
   // Load today's already-scanned cases on mount, so a page refresh doesn't lose the shift's data
   useEffect(() => {
@@ -50,9 +66,10 @@ export default function App() {
   }
 
   async function handleScan(e) {
-    e.preventDefault()
+    if (e && e.preventDefault) e.preventDefault()
     const caseNumber = caseInput.trim()
-    if (!caseNumber) return
+    if (!caseNumber || loading) return
+    if (autoSubmitTimer.current) clearTimeout(autoSubmitTimer.current)
 
     if (rows.some((r) => r.caseNumber.toLowerCase() === caseNumber.toLowerCase())) {
       setMessage({ type: 'warn', text: `Case ${caseNumber} is already on the list.` })
@@ -189,7 +206,7 @@ export default function App() {
           type="text"
           value={caseInput}
           onChange={(e) => setCaseInput(e.target.value)}
-          placeholder="Scan or type case number, then Enter"
+          placeholder="Scan case number — adds automatically"
           autoFocus
           disabled={loading}
         />
@@ -197,6 +214,7 @@ export default function App() {
           {loading ? 'Looking up...' : 'Add'}
         </button>
       </form>
+      <p className="hint">Just scan — each case adds itself once scanning pauses. The "Add" button is only a manual fallback.</p>
 
       {message && <div className={`msg msg-${message.type}`}>{message.text}</div>}
 

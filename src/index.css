@@ -68,6 +68,12 @@ button.link {
   text-decoration: underline;
 }
 
+.hint {
+  font-size: 13px;
+  color: #6b7280;
+  margin: -4px 0 12px;
+}
+
 .msg {
   padding: 10px 14px;
   border-radius: 6px;
