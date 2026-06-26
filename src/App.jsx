@@ -169,6 +169,7 @@ export default function App() {
       }
 
       const newRow = {
+        id: null,
         caseNumber,
         panNumber: c['Pan Number'] || '',
         account,
@@ -180,8 +181,9 @@ export default function App() {
       setRows((prev) => [...prev, newRow])
       setMessage({ type: 'ok', text: `Added ${caseNumber}.` })
 
-      // 4. Log it to Supabase so it survives a refresh / can be reviewed later
-      supabase
+      // 4. Log it to Supabase so it survives a refresh / can be reviewed later.
+      // Capture the id that comes back so "remove" can delete this exact row even before a refresh.
+      const { data: inserted, error: insertErr } = await supabase
         .from('supervisor_scan_log')
         .insert({
           case_number: caseNumber,
@@ -193,9 +195,16 @@ export default function App() {
           business_unit: c['Business Unit'] || null,
           shift_date: todayStr(),
         })
-        .then(({ error }) => {
-          if (error) console.error('Failed to log scan:', error)
-        })
+        .select('id')
+        .single()
+
+      if (insertErr) {
+        console.error('Failed to log scan:', insertErr)
+      } else if (inserted) {
+        setRows((prev) =>
+          prev.map((r) => (r.caseNumber === caseNumber && r.id === null ? { ...r, id: inserted.id } : r))
+        )
+      }
     } catch (err) {
       console.error(err)
       setMessage({ type: 'error', text: `Lookup failed: ${err.message}` })
@@ -206,8 +215,29 @@ export default function App() {
     }
   }
 
-  function removeRow(caseNumber) {
-    setRows((prev) => prev.filter((r) => r.caseNumber !== caseNumber))
+  async function removeRow(row) {
+    // Optimistically remove from the screen first
+    setRows((prev) => prev.filter((r) => (r.id != null ? r.id !== row.id : r.caseNumber !== row.caseNumber)))
+
+    try {
+      if (row.id != null) {
+        const { error } = await supabase.from('supervisor_scan_log').delete().eq('id', row.id)
+        if (error) throw error
+      } else {
+        // Fallback for the rare case a row's id never came back from the insert
+        const { error } = await supabase
+          .from('supervisor_scan_log')
+          .delete()
+          .eq('case_number', row.caseNumber)
+          .eq('shift_date', todayStr())
+        if (error) throw error
+      }
+    } catch (err) {
+      console.error('Failed to delete scan:', err)
+      setMessage({ type: 'error', text: `Could not remove ${row.caseNumber} from the saved log: ${err.message}` })
+      // Put it back since the delete failed
+      setRows((prev) => [...prev, row])
+    }
   }
 
   function clearSession() {
@@ -290,7 +320,7 @@ export default function App() {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.caseNumber}>
+            <tr key={r.id ?? r.caseNumber}>
               <td>{r.caseNumber}</td>
               <td>{r.panNumber}</td>
               <td>{r.account}</td>
@@ -298,7 +328,7 @@ export default function App() {
               <td>{r.units}</td>
               <td>${fmtMoney(r.price)}</td>
               <td>
-                <button className="link" onClick={() => removeRow(r.caseNumber)}>
+                <button className="link" onClick={() => removeRow(r)}>
                   remove
                 </button>
               </td>
