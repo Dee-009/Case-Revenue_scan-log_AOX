@@ -131,3 +131,29 @@ tfoot td {
   background: #f9fafb;
   border-top: 2px solid #ddd;
 }
+
+tr.rush-row {
+  background: #fff7ed;
+}
+
+tr.rush-row:hover {
+  background: #ffedd5;
+}
+
+.rush-date {
+  font-weight: 600;
+  color: #c2410c;
+}
+
+.rush-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  background: #dc2626;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+  vertical-align: middle;
+}

@@ -82,6 +82,7 @@ export default function App() {
       .order('created_at', { ascending: true })
 
     if (!error && data) {
+      const today = todayStr()
       setRows(
         data.map((r) => ({
           id: r.id,
@@ -91,6 +92,9 @@ export default function App() {
           productType: r.product_type,
           units: Number(r.units) || 0,
           price: Number(r.price) || 0,
+          shipDate: r.ship_date || '',
+          doctorDueDate: r.doctor_due_date || '',
+          isRush: r.ship_date ? r.ship_date <= today : false,
         }))
       )
     }
@@ -116,7 +120,7 @@ export default function App() {
       const { data: caseRows, error: caseErr } = await supabase
         .from('Cases')
         .select(
-          '"Case Number","Pan Number","Account Number","Primary Product","Primary Product Number","Business Unit"'
+          '"Case Number","Pan Number","Account Number","Primary Product","Primary Product Number","Business Unit","Ship Date","Doctor Due Date"'
         )
         .eq('Case Number', caseNumber)
         .limit(1)
@@ -168,6 +172,11 @@ export default function App() {
         }
       }
 
+      const shipDate = c['Ship Date'] ? c['Ship Date'].slice(0, 10) : ''
+      const doctorDueDate = c['Doctor Due Date'] ? c['Doctor Due Date'].slice(0, 10) : ''
+      const today = todayStr()
+      const isRush = shipDate !== '' && shipDate <= today
+
       const newRow = {
         id: null,
         caseNumber,
@@ -176,6 +185,9 @@ export default function App() {
         productType,
         units,
         price,
+        shipDate,
+        doctorDueDate,
+        isRush,
       }
 
       setRows((prev) => [...prev, newRow])
@@ -194,6 +206,8 @@ export default function App() {
           price: newRow.price,
           business_unit: c['Business Unit'] || null,
           shift_date: todayStr(),
+          ship_date: newRow.shipDate || null,
+          doctor_due_date: newRow.doctorDueDate || null,
         })
         .select('id')
         .single()
@@ -251,16 +265,22 @@ export default function App() {
       'Pan Number': r.panNumber,
       Account: r.account,
       'Product Type': r.productType,
+      'Ship Date': r.shipDate || '',
+      'Dr Due Date': r.doctorDueDate || '',
       Units: r.units,
       Price: r.price,
+      Rush: r.isRush ? 'YES' : '',
     }))
     sheetData.push({
       'Case Number': '',
       'Pan Number': '',
       Account: '',
       'Product Type': 'TOTAL',
+      'Ship Date': '',
+      'Dr Due Date': '',
       Units: totalUnits,
       Price: totalPrice,
+      Rush: '',
     })
 
     const ws = XLSX.utils.json_to_sheet(sheetData)
@@ -313,6 +333,8 @@ export default function App() {
             <th>Pan Number</th>
             <th>Account</th>
             <th>Product Type</th>
+            <th>Ship Date</th>
+            <th>Dr Due Date</th>
             <th>Units</th>
             <th>Price</th>
             <th></th>
@@ -320,11 +342,13 @@ export default function App() {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id ?? r.caseNumber}>
+            <tr key={r.id ?? r.caseNumber} className={r.isRush ? 'rush-row' : ''}>
               <td>{r.caseNumber}</td>
               <td>{r.panNumber}</td>
               <td>{r.account}</td>
               <td>{r.productType}</td>
+              <td className={r.isRush ? 'rush-date' : ''}>{r.shipDate || '—'}{r.isRush && <span className="rush-badge">RUSH</span>}</td>
+              <td>{r.doctorDueDate || '—'}</td>
               <td>{r.units}</td>
               <td>${fmtMoney(r.price)}</td>
               <td>
@@ -337,7 +361,7 @@ export default function App() {
         </tbody>
         <tfoot>
           <tr>
-            <td colSpan={4}>TOTAL</td>
+            <td colSpan={6}>TOTAL</td>
             <td>{totalUnits}</td>
             <td>${fmtMoney(totalPrice)}</td>
             <td></td>
